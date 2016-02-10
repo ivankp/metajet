@@ -75,7 +75,7 @@ double rap(const T& p, double pt2) noexcept {
 // --------------------------------------------------------
 
 template <typename Iter>
-using deref_t = std::iterator_traits<Iter>::value_type
+using deref_t = std::iterator_traits<Iter>::value_type;
 
 template <typename P> struct pseudo_jet {
   P p; // particle
