@@ -1,5 +1,5 @@
-#ifndef FUNCTION_TRATS_HH
-#define FUNCTION_TRATS_HH
+#ifndef FUNCTION_TRAITS_HH
+#define FUNCTION_TRAITS_HH
 
 // Source: http://stackoverflow.com/a/7943765/2640636
 

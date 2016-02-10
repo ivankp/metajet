@@ -6,11 +6,8 @@
 #include <vector>
 #include <list>
 #include <cmath>
-#include <type_traits>
 #include <iterator>
 #include <limits>
-
-#include "function_traits.hh"
 
 namespace metajet {
 
@@ -92,7 +89,7 @@ template <typename P> struct pseudo_jet {
   double Rij(const pseudo_jet<P>& j) noexcept {
     const double pt2i = pt2(p);
     const double pt2j = pt2(j.p);
-    return Rij_ = sq( rap(p,pt2i)+rap(p,pt2j), phi(p,pt2i)+phi(p,pt2j) );
+    return Rij_ = sq( rap(p,pt2i)-rap(p,pt2j), phi(p,pt2i)-phi(p,pt2j) );
   }
   inline double diB(double power) noexcept {
     // p = -1 : anti-kt
