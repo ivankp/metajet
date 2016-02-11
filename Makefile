@@ -3,7 +3,7 @@ CXX := g++
 
 CXXFLAGS := -std=c++11 -Wall -g -Isrc
 # $(shell root-config --cflags)
-LIBS :=
+LIBS := -lfastjet -pthread
 # $(shell root-config --libs)
 
 .PHONY: all clean
