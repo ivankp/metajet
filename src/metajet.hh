@@ -101,8 +101,10 @@ template <typename P> struct pseudo_jet {
   bool update_Rij(const pseudo_jet<P>& j) noexcept {
     const double pt2i = pt2(p);
     const double pt2j = pt2(j.p);
-    const double Rij = sq( rap(p,pt2i)-rap(j.p,pt2j),
-                           delta_phi(phi(p,pt2i),phi(j.p,pt2j)) );
+    const double Rij = std::sqrt( sq(
+      rap(p,pt2i)-rap(j.p,pt2j),
+      delta_phi(phi(p,pt2i),phi(j.p,pt2j))
+    ) );
     if (Rij < this->Rij) {
       this->Rij = Rij;
       return true;
@@ -130,7 +132,9 @@ template <typename T> struct with_nearest: public T {
   inline void update_Rij(iter j) noexcept {
     if ( T::update_Rij(*j) ) near = j;
   }
-  inline void update_dij(double R) noexcept { T::update_dij(*near,R); }
+  inline void update_dij(double R) noexcept {
+    T::update_dij(*near,R);
+  }
   iter merge(double power) noexcept {
     (*this) += *near;
     T::update_diB(power); // compute beam distances diB
@@ -153,10 +157,6 @@ cluster(InputIterator first, InputIterator last,
 
   for (auto it=first; it!=last; ++it) // fill list of PseudoJets
     pp.emplace_back(*it,power);
-
-  // test(pp.size())
-
-  // for (auto& p : pp) test(p.Rij)
 
   // update nearest geometric neighbors Rij
   for (auto p=++pp.begin(), end=pp.end(); p!=end; ++p) {
@@ -200,13 +200,15 @@ cluster(InputIterator first, InputIterator last,
       auto x = p->merge(power); // x = obsolete pseudo-jet
 
       // update nearest geometric neighbors Rij
-      for (auto p1=pp.begin(), end=pp.end(); p1!=end; ++p1) {
-        if ((p1->near!=p && p1->near!=x) || p1==x) continue;
-        p1->Rij = std::numeric_limits<double>::max(); // reset Rij
-        for (auto p2=pp.begin(); p2!=end; ++p2) {
-          if (p1!=p2 && p2!=x) p1->update_Rij(p2);
+       if (pp.size()>2) {
+        for (auto p1=pp.begin(), end=pp.end(); p1!=end; ++p1) {
+          if ((p1->near!=p && p1->near!=x) || p1==x) continue;
+          p1->Rij = std::numeric_limits<double>::max(); // reset Rij
+          for (auto p2=pp.begin(); p2!=end; ++p2) {
+            if (p1!=p2 && p2!=x) p1->update_Rij(p2);
+          }
+          p1->update_dij(R);
         }
-        p1->update_dij(R);
       }
 
       // TODO: device a way to not calculate Rij twice
