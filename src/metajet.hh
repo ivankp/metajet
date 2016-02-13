@@ -98,15 +98,11 @@ template <typename P> struct pseudo_jet {
   inline void operator+=(const pseudo_jet<P>& other) noexcept {
     p += other.p;
   }
-  bool update_Rij(const pseudo_jet<P>& j) noexcept {
+  double update_Rij2(const pseudo_jet<P>& j) noexcept {
     const double pt2i = pt2(p);
     const double pt2j = pt2(j.p);
-    const double Rij2 = sq( rap(p,pt2i)-rap(j.p,pt2j),
-                           delta_phi(phi(p,pt2i),phi(j.p,pt2j)) );
-    if (Rij2 < this->Rij2) {
-      this->Rij2 = Rij2;
-      return true;
-    } else return false;
+    return sq( rap(p,pt2i)-rap(j.p,pt2j),
+               delta_phi(phi(p,pt2i),phi(j.p,pt2j)) );
   }
   inline void update_diB(double power) noexcept {
     // p = -1 : anti-kt
@@ -119,19 +115,21 @@ template <typename P> struct pseudo_jet {
   }
 };
 
-template <typename T> struct with_nearest: public T {
-  using iter = typename std::list<with_nearest<T>>::iterator;
+template <typename T> struct pseudo_jet_wrap: public T {
+  using iter = typename std::list<pseudo_jet_wrap<T>>::iterator;
   iter near;
 
-  with_nearest(const T& p, double power): T(p) {
+  pseudo_jet_wrap(const T& p, double power): T(p) {
     T::update_diB(power); // compute beam distances diB
     T::Rij2 = std::numeric_limits<double>::max(); // reset Rij
   }
-  inline bool update_Rij(iter j) noexcept {
-    if ( T::update_Rij(*j) ) {
+  inline double update_Rij2(iter j) noexcept {
+    const double Rij2 = T::update_Rij2(*j);
+    if (Rij2 < this->Rij2) {
+      this->Rij2 = Rij2;
       near = j;
-      return true;
-    } else return false;
+    }
+    return Rij2;
   }
   inline void update_dij(double R2) noexcept {
     T::update_dij(*near,R2);
@@ -154,7 +152,7 @@ cluster(InputIterator first, InputIterator last,
 ) {
   const double R2 = sq(r);
 
-  std::list<with_nearest<PseudoJet>> pp; // particles and pseudo-jets
+  std::list<pseudo_jet_wrap<PseudoJet>> pp; // particles and pseudo-jets
   std::vector<deref_t<InputIterator>> jj; // complete jets
 
   for (auto it=first; it!=last; ++it) // fill list of PseudoJets
@@ -163,17 +161,19 @@ cluster(InputIterator first, InputIterator last,
   // update nearest geometric neighbors Rij
   for (auto p=++pp.begin(), end=pp.end(); p!=end; ++p) {
     for (auto q=pp.begin(); q!=p; ++q) {
-      if ( p->update_Rij(q) )
-        if (p->Rij2 < q->Rij2) {
-          q->near = p;
-          q->Rij2 = p->Rij2;
-        }
+      const double Rij2 = p->update_Rij2(q);
+      if (Rij2 < q->Rij2) {
+        // TODO: optimize mutual update of Rij without recomputing
+        q->near = p;
+        q->Rij2 = Rij2;
+      }
     }
   }
 
   // update nearest scaled neighbors dij
   for (auto& p : pp) p.update_dij(R2);
 
+  #ifdef DEBUG
   for (const auto& p : pp) {
     const double kt2 = pt2(p.p);
     test(kt2)
@@ -183,6 +183,7 @@ cluster(InputIterator first, InputIterator last,
     test(p.dij)
     std::cout << std::endl;
   }
+  #endif
 
   // TODO: implement grid
 
@@ -211,7 +212,7 @@ cluster(InputIterator first, InputIterator last,
           if ((p1->near!=p && p1->near!=x) || p1==x) continue;
           p1->Rij2 = std::numeric_limits<double>::max(); // reset Rij
           for (auto p2=pp.begin(); p2!=end; ++p2) {
-            if (p1!=p2 && p2!=x) p1->update_Rij(p2);
+            if (p1!=p2 && p2!=x) p1->update_Rij2(p2);
           }
           p1->update_dij(R2);
         }
@@ -231,7 +232,7 @@ cluster(InputIterator first, InputIterator last,
         if (p1->near!=p || p1==p) continue;
         p1->Rij2 = std::numeric_limits<double>::max(); // reset Rij
         for (auto p2=pp.begin(); p2!=end; ++p2) {
-          if (p1!=p2 && p2!=p) p1->update_Rij(p2);
+          if (p1!=p2 && p2!=p) p1->update_Rij2(p2);
         }
         p1->update_dij(R2);
       }
@@ -244,9 +245,6 @@ cluster(InputIterator first, InputIterator last,
   // identify last pseudo-jet as a jet
   if ( __builtin_expect(pp.size(),1) && cut(pp.front().p) )
     jj.emplace_back(std::move(pp.front().p));
-
-  // test(pp.size())
-  // test(jj.size())
 
   return std::move(jj);
 }

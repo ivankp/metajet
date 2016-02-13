@@ -2,6 +2,7 @@ CC  := gcc
 CXX := g++
 
 CXXFLAGS := -std=c++11 -Wall -g -Isrc
+# -DDEBUG
 # $(shell root-config --cflags)
 LIBS := -lfastjet -pthread
 # $(shell root-config --libs)

@@ -91,8 +91,6 @@ int main(int argc, char **argv)
         pz = pt*sinh(eta);
         E  = sqrt(sq(px,py,pz,m));
 
-        // cout << px <<' '<< py <<' '<< pz <<' '<< E << endl;
-
         pp.emplace_back(px,py,pz,E);
       }
     } else {
@@ -100,6 +98,7 @@ int main(int argc, char **argv)
       np = pp.size();
     }
 
+    #ifdef DEBUG
     for (const auto& p : pp) {
       test(p.kt2())
       test(p.rap())
@@ -112,6 +111,7 @@ int main(int argc, char **argv)
     cout << "d20 = " << dij(pp[2],pp[0]) << endl;
     cout << "d21 = " << dij(pp[2],pp[1]) << endl;
     cout << endl;
+    #endif
 
     // FastJet **********************************************
 
