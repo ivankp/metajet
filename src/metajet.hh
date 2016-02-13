@@ -163,9 +163,8 @@ cluster(InputIterator first, InputIterator last,
     for (auto q=pp.begin(); q!=p; ++q) {
       const double Rij2 = p->update_Rij2(q);
       if (Rij2 < q->Rij2) {
-        // TODO: optimize mutual update of Rij without recomputing
-        q->near = p;
         q->Rij2 = Rij2;
+        q->near = p;
       }
     }
   }
