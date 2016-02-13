@@ -18,6 +18,10 @@
 using namespace std;
 using namespace fastjet;
 
+template <typename T> inline T sq(T x) noexcept { return x*x; }
+template <typename T, typename... TT>
+inline T sq(T x, TT... xx) noexcept { return sq(x)+sq(xx...); }
+
 int main(int argc, char **argv)
 {
   if (argc!=3 && argc!=4) {
@@ -37,21 +41,21 @@ int main(int argc, char **argv)
     jalg = antikt_algorithm;
     power = -1;
     dij = [R](const PseudoJet& a, const PseudoJet& b){
-      return min(1./a.kt2(),1./b.kt2())*a.delta_R(b)/R;
+      return min(1./a.kt2(),1./b.kt2())*sq(a.delta_R(b)/R);
     };
     diB = [](const PseudoJet& a){ return 1./a.kt2(); };
   } else if (!strcmp(argv[1],"kt")) {
     jalg = kt_algorithm;
     power = 1;
     dij = [R](const PseudoJet& a, const PseudoJet& b){
-      return min(a.kt2(),b.kt2())*a.delta_R(b)/R;
+      return min(a.kt2(),b.kt2())*sq(a.delta_R(b)/R);
     };
     diB = [](const PseudoJet& a){ return a.kt2(); };
   } else if (!strcmp(argv[1],"cambridge")) {
     jalg = cambridge_algorithm;
     power = 0;
     dij = [R](const PseudoJet& a, const PseudoJet& b){
-      return a.delta_R(b)/R;
+      return sq(a.delta_R(b)/R);
     };
     diB = [](const PseudoJet& a){ return 1.; };
   } else {
@@ -85,7 +89,7 @@ int main(int argc, char **argv)
         px = pt*cos(phi);
         py = pt*sin(phi);
         pz = pt*sinh(eta);
-        E  = sqrt(metajet::sq(px,py,pz,m));
+        E  = sqrt(sq(px,py,pz,m));
 
         // cout << px <<' '<< py <<' '<< pz <<' '<< E << endl;
 
@@ -95,6 +99,19 @@ int main(int argc, char **argv)
       while (cin >> px >> py >> pz >> E) pp.emplace_back(px,py,pz,E);
       np = pp.size();
     }
+
+    for (const auto& p : pp) {
+      test(p.kt2())
+      test(p.rap())
+      test(p.phi())
+    }
+    cout << "R10^2 = " << sq(pp[1].delta_R(pp[0])) << endl;
+    cout << "R20^2 = " << sq(pp[2].delta_R(pp[0])) << endl;
+    cout << "R21^2 = " << sq(pp[2].delta_R(pp[1])) << endl;
+    cout << "d10 = " << dij(pp[1],pp[0]) << endl;
+    cout << "d20 = " << dij(pp[2],pp[0]) << endl;
+    cout << "d21 = " << dij(pp[2],pp[1]) << endl;
+    cout << endl;
 
     // FastJet **********************************************
 
@@ -115,7 +132,7 @@ int main(int argc, char **argv)
       return pts;
     });
 
-    // n2jet_java *******************************************
+    // metajet **********************************************
 
     auto fut_mj = async(launch::async, [=]() {
       // cluster jets

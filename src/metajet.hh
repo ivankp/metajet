@@ -91,7 +91,7 @@ template <> struct with_constits<true> {
 
 template <typename P> struct pseudo_jet {
   P p; // particle
-  double Rij, diB, dij;
+  double Rij2, diB, dij;
 
   pseudo_jet(const P& p): p(p) { }
 
@@ -101,12 +101,10 @@ template <typename P> struct pseudo_jet {
   bool update_Rij(const pseudo_jet<P>& j) noexcept {
     const double pt2i = pt2(p);
     const double pt2j = pt2(j.p);
-    const double Rij = std::sqrt( sq(
-      rap(p,pt2i)-rap(j.p,pt2j),
-      delta_phi(phi(p,pt2i),phi(j.p,pt2j))
-    ) );
-    if (Rij < this->Rij) {
-      this->Rij = Rij;
+    const double Rij2 = sq( rap(p,pt2i)-rap(j.p,pt2j),
+                           delta_phi(phi(p,pt2i),phi(j.p,pt2j)) );
+    if (Rij2 < this->Rij2) {
+      this->Rij2 = Rij2;
       return true;
     } else return false;
   }
@@ -116,8 +114,8 @@ template <typename P> struct pseudo_jet {
     // p =  1 : kt
     diB = pow(pt2(p),power);
   }
-  inline void update_dij(const pseudo_jet<P>& j, double R) noexcept {
-    dij = std::min(diB,j.diB) * Rij / R;
+  inline void update_dij(const pseudo_jet<P>& j, double R2) noexcept {
+    dij = std::min(diB,j.diB) * Rij2 / R2;
   }
 };
 
@@ -127,18 +125,21 @@ template <typename T> struct with_nearest: public T {
 
   with_nearest(const T& p, double power): T(p) {
     T::update_diB(power); // compute beam distances diB
-    T::Rij = std::numeric_limits<double>::max(); // reset Rij
+    T::Rij2 = std::numeric_limits<double>::max(); // reset Rij
   }
-  inline void update_Rij(iter j) noexcept {
-    if ( T::update_Rij(*j) ) near = j;
+  inline bool update_Rij(iter j) noexcept {
+    if ( T::update_Rij(*j) ) {
+      near = j;
+      return true;
+    } else return false;
   }
-  inline void update_dij(double R) noexcept {
-    T::update_dij(*near,R);
+  inline void update_dij(double R2) noexcept {
+    T::update_dij(*near,R2);
   }
   iter merge(double power) noexcept {
     (*this) += *near;
     T::update_diB(power); // compute beam distances diB
-    T::Rij = std::numeric_limits<double>::max(); // reset Rij
+    T::Rij2 = std::numeric_limits<double>::max(); // reset Rij
     return near;
   }
 };
@@ -149,8 +150,9 @@ template <typename InputIterator, typename Cut,
           typename PseudoJet=pseudo_jet<deref_t<InputIterator>>>
 std::vector<deref_t<InputIterator>>
 cluster(InputIterator first, InputIterator last,
-        double R, double power, Cut cut
+        double r, double power, Cut cut
 ) {
+  const double R2 = sq(r);
 
   std::list<with_nearest<PseudoJet>> pp; // particles and pseudo-jets
   std::vector<deref_t<InputIterator>> jj; // complete jets
@@ -161,18 +163,29 @@ cluster(InputIterator first, InputIterator last,
   // update nearest geometric neighbors Rij
   for (auto p=++pp.begin(), end=pp.end(); p!=end; ++p) {
     for (auto q=pp.begin(); q!=p; ++q) {
-      p->update_Rij(q);
-      if (p->Rij < q->Rij) {
-        q->near = p;
-        q->Rij = p->Rij;
-      }
+      if ( p->update_Rij(q) )
+        if (p->Rij2 < q->Rij2) {
+          q->near = p;
+          q->Rij2 = p->Rij2;
+        }
     }
   }
 
-  // for (auto& p : pp) test(p.Rij)
-
   // update nearest scaled neighbors dij
-  for (auto& p : pp) p.update_dij(R);
+  for (auto& p : pp) p.update_dij(R2);
+
+  for (auto& p : pp) {
+    const double kt2 = pt2(p.p);
+    test(kt2)
+    test(rap(p.p,kt2))
+    test(phi(p.p,kt2))
+    test(p.Rij2)
+    test(p.dij)
+  }
+  std::cout << std::endl;
+
+  for (auto& p : pp) test(p.Rij2)
+  std::cout << std::endl;
 
   // TODO: implement grid
 
@@ -189,6 +202,8 @@ cluster(InputIterator first, InputIterator last,
     for (auto q=pp.begin(), end=pp.end(); q!=end; ++q) {
       if (q->dij < dist) { p = q; dist = q->dij; merge = true; }
       if (q->diB < dist) { p = q; dist = q->diB; merge = false; }
+      test(q->dij)
+      test(q->diB)
     }
 
     // test(merge)
@@ -203,11 +218,11 @@ cluster(InputIterator first, InputIterator last,
        if (pp.size()>2) {
         for (auto p1=pp.begin(), end=pp.end(); p1!=end; ++p1) {
           if ((p1->near!=p && p1->near!=x) || p1==x) continue;
-          p1->Rij = std::numeric_limits<double>::max(); // reset Rij
+          p1->Rij2 = std::numeric_limits<double>::max(); // reset Rij
           for (auto p2=pp.begin(); p2!=end; ++p2) {
             if (p1!=p2 && p2!=x) p1->update_Rij(p2);
           }
-          p1->update_dij(R);
+          p1->update_dij(R2);
         }
       }
 
@@ -225,11 +240,11 @@ cluster(InputIterator first, InputIterator last,
       // update nearest geometric neighbors Rij
       for (auto p1=pp.begin(), end=pp.end(); p1!=end; ++p1) {
         if (p1->near!=p || p1==p) continue;
-        p1->Rij = std::numeric_limits<double>::max(); // reset Rij
+        p1->Rij2 = std::numeric_limits<double>::max(); // reset Rij
         for (auto p2=pp.begin(); p2!=end; ++p2) {
           if (p1!=p2 && p2!=p) p1->update_Rij(p2);
         }
-        p1->update_dij(R);
+        p1->update_dij(R2);
       }
 
       pp.erase(p);
