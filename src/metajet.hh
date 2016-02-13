@@ -174,25 +174,20 @@ cluster(InputIterator first, InputIterator last,
   // update nearest scaled neighbors dij
   for (auto& p : pp) p.update_dij(R2);
 
-  for (auto& p : pp) {
+  for (const auto& p : pp) {
     const double kt2 = pt2(p.p);
     test(kt2)
     test(rap(p.p,kt2))
     test(phi(p.p,kt2))
     test(p.Rij2)
     test(p.dij)
+    std::cout << std::endl;
   }
-  std::cout << std::endl;
-
-  for (auto& p : pp) test(p.Rij2)
-  std::cout << std::endl;
 
   // TODO: implement grid
 
   // loop until pseudo-jets are used up -------------------
   while (pp.size()>1) {
-
-    // test(pp.size())
 
     auto p = pp.begin();
     double dist = p->diB; // minimum distance
@@ -202,11 +197,7 @@ cluster(InputIterator first, InputIterator last,
     for (auto q=pp.begin(), end=pp.end(); q!=end; ++q) {
       if (q->dij < dist) { p = q; dist = q->dij; merge = true; }
       if (q->diB < dist) { p = q; dist = q->diB; merge = false; }
-      test(q->dij)
-      test(q->diB)
     }
-
-    // test(merge)
 
     // Either merge or identify a jet
     if (merge) {
@@ -228,9 +219,7 @@ cluster(InputIterator first, InputIterator last,
 
       // TODO: device a way to not calculate Rij twice
 
-      // test(1)
       pp.erase(x);
-      // test(2)
 
     } else {
 
