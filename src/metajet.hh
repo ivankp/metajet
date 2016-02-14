@@ -8,9 +8,7 @@
 #include <limits>
 #include <vector>
 #include <list>
-
-#define test(var) \
-  std::cout <<"\033[36m"<< #var <<"\033[0m"<< " = " << var << std::endl;
+#include <cmath>
 
 namespace metajet {
 
@@ -82,15 +80,10 @@ double rap(const T& p, double pt2) noexcept {
 template <typename Iter>
 using deref_t = typename std::iterator_traits<Iter>::value_type;
 
-/* TODO: use this
-template <bool With> struct with_constits { };
-template <> struct with_constits<true> {
-  std::vector<int> constits;
-  with_constits(int id): constits(1,id) { }
-};*/
-
 template <typename P> struct pseudo_jet {
-  P p; // particle
+  using p_type = P;
+
+  p_type p; // particle
   double Rij2, diB, dij;
 
   pseudo_jet(const P& p): p(p) { }
@@ -108,7 +101,7 @@ template <typename P> struct pseudo_jet {
     // p = -1 : anti-kt
     // p =  0 : Cambridge/Aachen
     // p =  1 : kt
-    diB = pow(pt2(p),power);
+    diB = std::pow(pt2(p),power);
   }
   inline void update_dij(const pseudo_jet<P>& j, double R2) noexcept {
     dij = std::min(diB,j.diB) * Rij2 / R2;
@@ -146,14 +139,14 @@ template <typename T> struct pseudo_jet_wrap: public T {
 
 template <typename InputIterator, typename Cut,
           typename PseudoJet=pseudo_jet<deref_t<InputIterator>>>
-std::vector<deref_t<InputIterator>>
+std::vector<typename PseudoJet::p_type>
 cluster(InputIterator first, InputIterator last,
         double r, double power, Cut cut
 ) {
   const double R2 = sq(r);
 
   std::list<pseudo_jet_wrap<PseudoJet>> pp; // particles and pseudo-jets
-  std::vector<deref_t<InputIterator>> jj; // complete jets
+  std::vector<typename PseudoJet::p_type> jj; // complete jets
 
   for (auto it=first; it!=last; ++it) // fill list of PseudoJets
     pp.emplace_back(*it,power);
@@ -171,20 +164,6 @@ cluster(InputIterator first, InputIterator last,
 
   // update nearest scaled neighbors dij
   for (auto& p : pp) p.update_dij(R2);
-
-  #ifdef DEBUG
-  for (const auto& p : pp) {
-    const double kt2 = pt2(p.p);
-    test(kt2)
-    test(rap(p.p,kt2))
-    test(phi(p.p,kt2))
-    test(p.Rij2)
-    test(p.dij)
-    std::cout << std::endl;
-  }
-  #endif
-
-  // TODO: implement grid
 
   // loop until pseudo-jets are used up -------------------
   while (pp.size()>1) {
@@ -217,8 +196,6 @@ cluster(InputIterator first, InputIterator last,
         }
       }
 
-      // TODO: device a way to not calculate Rij twice
-
       pp.erase(x);
 
     } else {
@@ -250,10 +227,10 @@ cluster(InputIterator first, InputIterator last,
 
 template <typename InputIterator,
           typename PseudoJet=pseudo_jet<deref_t<InputIterator>>>
-inline std::vector<deref_t<InputIterator>>
+inline std::vector<typename PseudoJet::p_type>
 cluster(InputIterator first, InputIterator last, double R, double power) {
   return cluster(first, last, R, power,
-    [](const deref_t<InputIterator>& p){ return true; });
+    [](const typename PseudoJet::p_type& p){ return true; });
 }
 
 } // end namespace
