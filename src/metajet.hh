@@ -128,7 +128,19 @@ template <typename T> struct pseudo_jet_wrap: public T {
     T::update_dij(*near,R2);
   }
   iter merge(double power) noexcept {
+    #ifdef DEBUG
+    std::cout << std::fixed << std::scientific << std::setprecision(8);
+    std::cout << "merged " << E(T::p) << " and " << E(near->p) << std::endl;
+    test(T::Rij2)
+    #endif
+
     (*this) += *near;
+
+    #ifdef DEBUG
+    test(E(T::p))
+    std::cout << std::endl;
+    #endif
+
     T::update_diB(power); // compute beam distances diB
     T::Rij2 = std::numeric_limits<double>::max(); // reset Rij
     return near;
@@ -185,12 +197,20 @@ cluster(InputIterator first, InputIterator last,
       auto x = p->merge(power); // x = obsolete pseudo-jet
 
       // update nearest geometric neighbors Rij
-       if (pp.size()>2) {
+      if (__builtin_expect(pp.size()>2,1)) {
         for (auto p1=pp.begin(), end=pp.end(); p1!=end; ++p1) {
           if ((p1->near!=p && p1->near!=x) || p1==x) continue;
           p1->Rij2 = std::numeric_limits<double>::max(); // reset Rij
           for (auto p2=pp.begin(); p2!=end; ++p2) {
-            if (p1!=p2 && p2!=x) p1->update_Rij2(p2);
+            if (p2!=p1 && p2!=x) {
+              const double Rij2 = p1->update_Rij2(p2);
+              // NOTE: seems to be necessary only for kt
+              if (p2->near!=p && p2->near!=x && p2->Rij2>Rij2) {
+                p2->Rij2 = Rij2;
+                p2->near = p1;
+                p2->update_dij(R2);
+              }
+            }
           }
           p1->update_dij(R2);
         }
@@ -208,7 +228,15 @@ cluster(InputIterator first, InputIterator last,
         if (p1->near!=p || p1==p) continue;
         p1->Rij2 = std::numeric_limits<double>::max(); // reset Rij
         for (auto p2=pp.begin(); p2!=end; ++p2) {
-          if (p1!=p2 && p2!=p) p1->update_Rij2(p2);
+          if (p2!=p1 && p2!=p) {
+            const double Rij2 = p1->update_Rij2(p2);
+            // NOTE: seems to be necessary only for kt
+            if (p2->near!=p && p2->Rij2>Rij2) {
+              p2->Rij2 = Rij2;
+              p2->near = p1;
+              p2->update_dij(R2);
+            }
+          }
         }
         p1->update_dij(R2);
       }
@@ -218,9 +246,12 @@ cluster(InputIterator first, InputIterator last,
     }
 
   }
+
   // identify last pseudo-jet as a jet
   if ( __builtin_expect(pp.size(),1) && cut(pp.front().p) )
     jj.emplace_back(std::move(pp.front().p));
+
+  // IDEA: check for N==1 at the beginning of the function
 
   return std::move(jj);
 }

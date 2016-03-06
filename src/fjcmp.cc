@@ -13,14 +13,17 @@
 
 #include <fastjet/ClusterSequence.hh>
 
+#ifdef DEBUG
+#define test(var) \
+  std::cout <<"\033[36m"<< #var <<"\033[0m"<< " = " << var << std::endl;
+#endif
+
 #include "metajet.hh"
 
 using namespace std;
 using namespace fastjet;
 
-template <typename T> inline T sq(T x) noexcept { return x*x; }
-template <typename T, typename... TT>
-inline T sq(T x, TT... xx) noexcept { return sq(x)+sq(xx...); }
+using metajet::sq;
 
 int main(int argc, char **argv)
 {
@@ -63,7 +66,7 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  JetDefinition jdef(jalg,R);
+  JetDefinition jdef(jalg,R,N2Plain);
 
   // mersenne twister random number generator
   mt19937 gen(chrono::system_clock::now().time_since_epoch().count());
@@ -99,36 +102,52 @@ int main(int argc, char **argv)
     }
 
     #ifdef DEBUG
-    for (const auto& p : pp) {
-      test(p.kt2())
-      test(p.rap())
-      test(p.phi())
+    for (size_t i=1; i<np; ++i) {
+      test(pp[i].kt2())
+      test(pp[i].rap())
+      test(pp[i].phi())
+      for (size_t j=0; j<i; ++j) {
+        cout << "R"<<i<<j<<"^2 = " << sq(pp[i].delta_R(pp[j])) << endl;
+        cout << "d"<<i<<j<<" = " << dij(pp[i],pp[j]) << endl;
+      }
     }
-    cout << "R10^2 = " << sq(pp[1].delta_R(pp[0])) << endl;
-    cout << "R20^2 = " << sq(pp[2].delta_R(pp[0])) << endl;
-    cout << "R21^2 = " << sq(pp[2].delta_R(pp[1])) << endl;
-    cout << "d10 = " << dij(pp[1],pp[0]) << endl;
-    cout << "d20 = " << dij(pp[2],pp[0]) << endl;
-    cout << "d21 = " << dij(pp[2],pp[1]) << endl;
     cout << endl;
     #endif
 
     // FastJet **********************************************
 
+    // for (auto& p : pp) {
+    //   static int i = 0;
+    //   p.set_user_index(i++);
+    // }
+
     auto fut_fj = async(launch::async, [&jdef,&pp](){
       // cluster jets
-      vector<PseudoJet> jets =
-        ClusterSequence(pp, jdef, false).inclusive_jets();
+      auto seq = ClusterSequence(pp, jdef, false);
+      vector<PseudoJet> jets = seq.inclusive_jets();
 
       // sort jets by pT
       sort( jets.begin(), jets.end(),
         [](const PseudoJet& i, const PseudoJet& j){ return i.pt() > j.pt(); }
       );
 
+      // #ifdef DEBUG
+      // cout <<flush<< "FJ Strategy: " << seq.strategy_string() << endl;
+      // #endif
+
+      /*cout << jets.front().cluster_hist_index() << endl;
+      PseudoJet partner;
+      for (const auto& jet : jets.front().constituents()) {
+        cout << jet.cluster_hist_index();
+        if (jet.has_partner(partner))
+          cout << ' ' << partner.cluster_hist_index();
+        cout << endl;
+      }*/
+
       // return jets' pT
       size_t njets = jets.size();
       vector<double> pts(njets);
-      for (size_t i=0; i<njets; ++i) pts[i] = jets[i].pt();
+      for (size_t i=0; i<njets; ++i) pts[i] = jets[i].E();
       return pts;
     });
 
@@ -147,7 +166,7 @@ int main(int argc, char **argv)
       // return jets' pT
       size_t njets = jets.size();
       vector<double> pts(njets);
-      for (size_t i=0; i<njets; ++i) pts[i] = jets[i].pt();
+      for (size_t i=0; i<njets; ++i) pts[i] = jets[i].E();
       return pts;
     });
 
@@ -156,28 +175,26 @@ int main(int argc, char **argv)
     const vector<double> out_fj = fut_fj.get();
     const vector<double> out_mj = fut_mj.get();
 
+    ostream coutN(cout.rdbuf());
+    coutN << right << fixed << scientific << setprecision(8);
+
     if (out_mj!=out_fj || argc==3) {
-      const auto flags = cout.flags();
-      cout << right << fixed << scientific << setprecision(8);
-      cout << endl << "FJ:";
-      for (double pt : out_fj) cout <<' '<< pt;
-      cout << endl << "MJ:";
-      for (double pt : out_mj) cout <<' '<< pt;
-      cout << endl;
-      cout.flags(flags);
+      coutN << endl << "FJ:";
+      for (double pt : out_fj) coutN <<' '<< pt;
+      coutN << endl << "MJ:";
+      for (double pt : out_mj) coutN <<' '<< pt;
+      coutN << endl;
 
       for (size_t i=0; i<np; ++i) {
-        cout << "p" << i << ": ";
-        cout << right << fixed << scientific << setprecision(8);
-        cout << pp[i].px() << ' ' << pp[i].py() << ' '
+        coutN << 'p' << i << ": ";
+        coutN << pp[i].px() << ' ' << pp[i].py() << ' '
              << pp[i].pz() << ' ' << pp[i].E ();
-        cout.flags(flags);
         cout << " diB = " << diB(pp[i]) << endl;
       }
       if (np<21)
         for (size_t i=1; i<np; ++i)
           for (size_t j=0; j<i; ++j)
-            cout << "d" << setw(3) << i << setw(3) << j
+            coutN << "d" << setw(3) << i << setw(3) << j
                  << " = " << dij(pp[i],pp[j]) << endl;
       cout << endl;
 
