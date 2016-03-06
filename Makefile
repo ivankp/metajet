@@ -1,19 +1,21 @@
-CC  := gcc
+SHELL := bash
 CXX := g++
 
 CXXFLAGS := -std=c++11 -Wall -g -Isrc
-# -DDEBUG
-# $(shell root-config --cflags)
-LIBS := -lfastjet -pthread
-# $(shell root-config --libs)
+LIBS :=
 
-.PHONY: all clean
-
-NODEPS := clean
+LIBS_fjcmp := -lfastjet -pthread
 
 SRCDIR := src
 BLDDIR := .build
 EXEDIR := bin
+LIBDIR := lib
+
+.PHONY: all clean
+
+.SECONDEXPANSION:
+
+NODEPS := clean
 
 BLDDIRS := $(shell find $(SRCDIR) -type d | sed "s|^$(SRCDIR)|$(BLDDIR)|")
 EXEDIRS := $(shell find $(SRCDIR) -type d | sed "s|^$(SRCDIR)|$(EXEDIR)|")
@@ -22,9 +24,12 @@ SRCS := $(shell find $(SRCDIR) -type f -name "*.cc")
 OBJS := $(patsubst $(SRCDIR)/%.cc,$(BLDDIR)/%.o,$(SRCS))
 DEPS := $(patsubst %.o,%.d,$(OBJS))
 
-GREP_EXE := grep -r '^ *int *main *(' $(SRCDIR) | cut -d':' -f1
+GREP_EXE := grep -r '^ *int \+main *(' $(SRCDIR) | cut -d':' -f1
 EXES := $(patsubst $(SRCDIR)/%.cc,$(EXEDIR)/%,$(shell $(GREP_EXE)))
 EXE_DEPS := $(patsubst $(EXEDIR)/%,$(BLDDIR)/%.d,$(EXES))
+
+EXE_OBJS := $(patsubst $(SRCDIR)/%.cc,$(BLDDIR)/%.o,$(shell $(GREP_EXE)))
+NON_EXE_OBJS := $(filter-out $(EXE_OBJS),$(OBJS))
 
 all: $(EXES)
 
@@ -52,21 +57,21 @@ $(BLDDIR)/%.d: $(SRCDIR)/%.cc
 	@$(CXX) $(CXXFLAGS) -MM -MT '$(<:$(SRCDIR)/%.cc=$(BLDDIR)/%.o)' $< -MF $@
 
 # compile objects
-$(BLDDIR)/%.o :
+$(BLDDIR)/%.o:
 	@echo CXX $(notdir $@)
-	@$(CXX) -c -I$(SRCDIR) $(CXXFLAGS) $< -o $@
+	@$(CXX) -fPIC -c -I$(SRCDIR) $(CXXFLAGS) $(INCL_$*) $< -o $@
 
 # link executables
-$(EXEDIR)/% : $(BLDDIR)/%.o
+$(EXEDIR)/%: $(BLDDIR)/%.o
 	@echo LD $(notdir $@)
-	@$(CXX) $(filter %.o,$^) -o $@ $(LIBS)
+	@$(CXX) $(filter %.o,$^) -o $@ $(LIBS) $(LIBS_$*)
 
 # directories as order-only-prerequisites
-$(OBJS) $(DEPS): | $(BLDDIRS)
-$(EXES): | $(EXEDIRS)
+$(DEPS): | $$(dir $$@)
+$(EXES): | $$(dir $$@)
 
 # make directories
-$(BLDDIRS) $(EXEDIRS):
+$(BLDDIRS) $(EXEDIRS): | $$(dir $$@)
 	mkdir $@
 
 clean:
