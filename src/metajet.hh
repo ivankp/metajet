@@ -56,7 +56,7 @@ double rap(const T& p, double pt2) noexcept {
   double _rap;
   const double abs_pz = std::abs(pz(p));
 
-  if (E(p) == abs_pz && pt2 == 0.) {
+  if (__builtin_expect(E(p) == abs_pz && pt2 == 0.,0)) {
     // Point has infinite rapidity -- convert that into a very large
     // number, but in such a way that different 0-pt momenta will have
     // different rapidities (so as to lift the degeneracy between
