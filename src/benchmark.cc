@@ -2,6 +2,7 @@
 #include <iomanip>
 #include <cstring>
 #include <chrono>
+#include <array>
 
 #include <boost/program_options.hpp>
 
@@ -19,18 +20,17 @@ namespace po = boost::program_options;
 #define test(var) \
   std::cout <<"\033[36m"<< #var <<"\033[0m"<< " = " << var << std::endl;
 
-/*struct mom {
-  double px, py, pz, E;
+struct mom: array<double,4> {
   mom(double px, double py, double pz, double E)
-  : px(px), py(py), pz(pz), E(E) { }
-
+  : array<double,4>{{px,py,pz,E}} { }
   mom& operator+=(const mom& other) {
-    px += other.px;
-    py += other.py;
-    pz += other.pz;
-    E  += other.E;
+    (*this)[0] += other[0];
+    (*this)[1] += other[1];
+    (*this)[2] += other[2];
+    (*this)[3] += other[3];
+    return *this;
   }
-};*/
+};
 
 int main(int argc, char **argv)
 {
@@ -84,7 +84,7 @@ int main(int argc, char **argv)
     : ( power==1 ? kt_algorithm
       : ( power==0 ? cambridge_algorithm
         : throw runtime_error("FastJet can only work with power=={1,0,-1}")
-    ) ) ), R
+    ) ) ), R//, N2Plain
   );
 
   cout << jdef.description() << endl;
@@ -94,8 +94,10 @@ int main(int argc, char **argv)
 
   for (unsigned Np : Nps) {
     running_stats stats_fj, stats_mj;
-    vector<PseudoJet> pp;
-    pp.reserve(Np);
+    vector<PseudoJet> pp_fj;
+    vector<mom> pp_mj;
+    pp_fj.reserve(Np);
+    pp_mj.reserve(Np);
 
     long nevents = 0;
     const auto t0 = steady_clock::now();
@@ -104,22 +106,24 @@ int main(int argc, char **argv)
         steady_clock::now() - t0
       ).count() < time_per_Np
     ) {
-      pp.clear();
+      pp_fj.clear();
+      pp_mj.clear();
       for (unsigned p=0; p<Np; ++p) {
         genevent(px, py, pz, E);
-        pp.emplace_back(px, py, pz, E);
+        pp_fj.emplace_back(px, py, pz, E);
+        pp_mj.emplace_back(px, py, pz, E);
       }
 
       // FastJet
       auto t1 = high_resolution_clock::now();
-      vector<PseudoJet> jets_fj = ClusterSequence(pp,jdef,false).inclusive_jets();
+      auto jets_fj = ClusterSequence(pp_fj,jdef,false).inclusive_jets();
       stats_fj.push( duration_cast<nanoseconds>(
         high_resolution_clock::now() - t1
       ).count()/1000.);
 
       // metajet
       t1 = high_resolution_clock::now();
-      vector<PseudoJet> jets_mj = metajet::cluster(pp.begin(),pp.end(),R,power);
+      auto jets_mj = metajet::cluster(pp_mj.begin(),pp_mj.end(),R,power);
       stats_mj.push( duration_cast<nanoseconds>(
         high_resolution_clock::now() - t1
       ).count()/1000.);
