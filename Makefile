@@ -1,10 +1,11 @@
 SHELL := bash
 CXX := g++
 
-CXXFLAGS := -std=c++11 -Wall -g -Isrc
+CXXFLAGS := -std=c++11 -Wall -O3 -Isrc
 LIBS :=
 
 LIBS_fjcmp := -lfastjet -pthread
+LIBS_benchmark := -lfastjet -lboost_program_options
 
 SRCDIR := src
 BLDDIR := .build

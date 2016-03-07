@@ -5,13 +5,14 @@
 #include <vector>
 #include <functional>
 #include <chrono>
-#include <random>
 #include <future>
 #include <cstring>
 #include <cstdio>
 #include <cmath>
 
 #include <fastjet/ClusterSequence.hh>
+
+#include "eventgen.hh"
 
 #ifdef DEBUG
 #define test(var) \
@@ -66,11 +67,9 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  JetDefinition jdef(jalg,R,N2Plain);
+  JetDefinition jdef(jalg,R);
 
-  // mersenne twister random number generator
-  mt19937 gen(chrono::system_clock::now().time_since_epoch().count());
-  uniform_real_distribution<double> dist(0.0,1.0);
+  eventgen genevent;
 
   long long event = 0;
   size_t np = (argc>3 ? atoi(argv[3]) : 0);
@@ -83,18 +82,8 @@ int main(int argc, char **argv)
       pp.clear();
       pp.reserve(np);
       for (size_t i=0, n=np; i<n; ++i) {
-        double m, pt,
-               eta = 10.*(acos(1.-2.*dist(gen))/M_PI-0.5),
-               phi = 2.*M_PI*dist(gen);
-        while (!isfinite(pt = 10.-150.*log(1.-dist(gen)))) { }
-        while (!isfinite(m  =     -20.*log(1.-dist(gen)))) { }
-
-        px = pt*cos(phi);
-        py = pt*sin(phi);
-        pz = pt*sinh(eta);
-        E  = sqrt(sq(px,py,pz,m));
-
-        pp.emplace_back(px,py,pz,E);
+        genevent(px, py, pz, E);
+        pp.emplace_back(px, py, pz, E);
       }
     } else {
       while (cin >> px >> py >> pz >> E) pp.emplace_back(px,py,pz,E);
