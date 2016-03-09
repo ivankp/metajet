@@ -89,6 +89,8 @@ int main(int argc, char **argv)
 
   cout << jdef.description() << endl;
 
+  metajet::cluster_sequence<> seq_mj(power,R);
+
   eventgen genevent;
   double px, py, pz, E;
 
@@ -123,7 +125,7 @@ int main(int argc, char **argv)
 
       // metajet
       t1 = high_resolution_clock::now();
-      auto jets_mj = metajet::cluster(pp_mj.begin(),pp_mj.end(),R,power);
+      auto jets_mj = seq_mj.cluster(pp_mj.begin(),pp_mj.end());
       stats_mj.push( duration_cast<nanoseconds>(
         high_resolution_clock::now() - t1
       ).count()/1000.);

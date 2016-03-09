@@ -7,7 +7,6 @@
 #include <chrono>
 #include <future>
 #include <cstring>
-#include <cstdio>
 #include <cmath>
 
 #include <fastjet/ClusterSequence.hh>
@@ -68,6 +67,7 @@ int main(int argc, char **argv)
   }
 
   JetDefinition jdef(jalg,R);
+  metajet::cluster_sequence<> seq_mj(power,R);
 
   eventgen genevent;
 
@@ -142,10 +142,9 @@ int main(int argc, char **argv)
 
     // metajet **********************************************
 
-    auto fut_mj = async(launch::async, [=]() {
+    auto fut_mj = async(launch::async, [&seq_mj,&pp]() {
       // cluster jets
-      vector<PseudoJet> jets =
-        metajet::cluster(pp.begin(),pp.end(),R,power);
+      vector<PseudoJet> jets = seq_mj.cluster(pp.begin(),pp.end());
 
       // sort jets by pT
       sort( jets.begin(), jets.end(),

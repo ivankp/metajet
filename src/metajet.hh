@@ -7,8 +7,9 @@
 #include <cstdlib>
 #include <cmath>
 #include <limits>
-//#include <iterator>
+#include <iterator>
 #include <utility>
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -23,8 +24,8 @@ template <typename T> inline T sq(T x) noexcept { return x*x; }
 template <typename T, typename... TT>
 inline T sq(T x, TT... xx) noexcept { return sq(x)+sq(xx...); }
 
-// template <typename Iter>
-// using deref_t = typename std::iterator_traits<Iter>::value_type;
+template <typename Iter>
+using deref_t = typename std::iterator_traits<Iter>::value_type;
 
 // ###########################################################################
 
@@ -85,18 +86,20 @@ double rap(const T& p, double pt2) noexcept {
 
 // ###########################################################################
 
-template <typename P> struct pseudo_jet {
-  using p_type = P;
-
-  p_type p; // particle
+struct pseudo_jet {
+  double p[4]; // 4-momentum
   double Rij2, diB, dij;
 
-  pseudo_jet(const P& p): p(p) { }
+  template <typename P>
+  pseudo_jet(const P& p): p{px(p),py(p),pz(p),E(p)} { }
 
-  inline void operator+=(const pseudo_jet<P>& other) noexcept {
-    p += other.p;
+  inline void operator+=(const pseudo_jet& j) noexcept {
+    p[0] += j.p[0];
+    p[1] += j.p[1];
+    p[2] += j.p[2];
+    p[3] += j.p[3];
   }
-  double update_Rij2(const pseudo_jet<P>& j) noexcept {
+  double calc_Rij2(const pseudo_jet& j) noexcept {
     const double pt2i = pt2(p);
     const double pt2j = pt2(j.p);
     return sq( rap(p,pt2i)-rap(j.p,pt2j),
@@ -108,146 +111,109 @@ template <typename P> struct pseudo_jet {
     // p =  1 : kt
     diB = std::pow(pt2(p),power);
   }
-  inline void update_dij(const pseudo_jet<P>& j, double R2) noexcept {
+  inline void update_dij(const pseudo_jet& j, double R2) noexcept {
     dij = std::min(diB,j.diB) * Rij2 / R2;
   }
 };
 
 // ###########################################################################
 
-template <typename T> struct pseudo_jet_wrap: public T {
-  using iter = typename std::list<pseudo_jet_wrap<T>>::iterator;
-  iter near;
-
-  pseudo_jet_wrap(const T& p, double power): T(p) {
-    T::update_diB(power); // compute beam distances diB
-    T::Rij2 = std::numeric_limits<double>::max(); // reset Rij
-  }
-  inline double update_Rij2(iter j) noexcept {
-    const double Rij2 = T::update_Rij2(*j);
-    if (Rij2 < this->Rij2) {
-      this->Rij2 = Rij2;
-      near = j;
-    }
-    return Rij2;
-  }
-  inline void update_dij(double R2) noexcept {
-    T::update_dij(*near,R2);
-  }
-  iter merge(double power) noexcept {
-    #ifdef DEBUG
-    std::cout << std::fixed << std::scientific << std::setprecision(8);
-    std::cout << "merged " << E(T::p) << " and " << E(near->p) << std::endl;
-    test(T::Rij2)
-    #endif
-
-    (*this) += *near;
-
-    #ifdef DEBUG
-    test(E(T::p))
-    std::cout << std::endl;
-    #endif
-
-    T::update_diB(power); // compute beam distances diB
-    T::Rij2 = std::numeric_limits<double>::max(); // reset Rij
-    return near;
-  }
-};
-
-// ###########################################################################
-
-template <typename PseudoJet,
-          typename IndexTypes=std::pair< std::uint16_t, std::uint_fast16_t >>
-class clustering_sequence {
+template <typename PseudoJet=pseudo_jet,
+          typename IndexType=std::uint16_t,
+          typename FastIndexType=std::uint_fast16_t>
+class cluster_sequence {
 public:
   using pseudo_jet_t = PseudoJet;
-  using p_type  = typename pseudo_jet_t::p_type;
-  using index_t = typename IndexTypes::first_type;
-  using fasti_t = typename IndexTypes::second_type;
+  using index_t = IndexType;
+  using fasti_t = FastIndexType;
 
   static constexpr auto index_size = sizeof(index_t);
   static constexpr auto  pjet_size = sizeof(pseudo_jet_t);
 
 private:
-  const double R2, power;
+  const double power, R2;
 
   index_t capacity; // maximum number of particles that
                     // would fit without reallocation
 
-  void* mem; // memory pool
   index_t *dij_heap, *diB_heap, *near;
-  PseudoJet *pp; // pseudo-jets
+  pseudo_jet_t *pp; // pseudo-jets
 
   static index_t validate_capacity(index_t n) {
     if (n <= std::numeric_limits<index_t>::max() ) return n;
     throw std::out_of_range(
-      "attempting to allocate clustering_sequence container larger then "
+      "attempting to allocate cluster_sequence container larger then "
       + std::to_string(std::numeric_limits<index_t>::max())
       + " (" + std::to_string(n) + ')' );
   }
 
   void alloc() {
-    if ( !(mem = malloc(index_size*capacity*3 + pjet_size*capacity)) )
-      throw std::runtime_error("cannot allocate mem for clustering_sequence");
+    void* mem = malloc(index_size*capacity*3 + pjet_size*capacity);
+    if ( !mem ) throw std::runtime_error(
+      "cannot allocate memory for cluster_sequence");
     dij_heap = static_cast<index_t*>(mem);
     diB_heap = dij_heap + index_size*capacity;
     near     = diB_heap + index_size*capacity;
-    pp       = static_cast<value_t*>(near + index_size*capacity);
+    pp       = static_cast<pseudo_jet_t*>(mem) + index_size*capacity*3;
   }
 
 public:
-  clustering_sequence_container(double R, double power)
-  : R2(R*R), power(power), capacity(0), mem(nullptr) { }
-  clustering_sequence_container(double R, double power, index_t n)
-  : R2(R*R), power(power), capacity(validate_capacity(n)) { alloc(); }
+  cluster_sequence(double power, double R)
+  : power(power), R2(R*R), capacity(0), dij_heap(nullptr) { }
+  cluster_sequence(double power, double R, index_t n)
+  : power(power), R2(R*R), capacity(validate_capacity(n)) { alloc(); }
+  ~cluster_sequence() { free(dij_heap); }
 
 private:
-  inline pseudo_jet_t& min_dij() const noexcept { return *(pp+dij_heap[0]); }
-  inline pseudo_jet_t& min_diB() const noexcept { return *(pp+diB_heap[0]); }
-
-  inline double update_Rij2(fasti_t i, fasti_t j)
-  noexcept(noexcept(pseudo_jet_t::update_Rij2(
-    std::declval<const pseudo_jet_t&>() )))
+  double update_Rij2(fasti_t i, fasti_t j) noexcept(noexcept(
+    std::declval<pseudo_jet_t&>().calc_Rij2(
+      std::declval<const pseudo_jet_t&>() )))
   {
-    return pp[i]->update_Rij2(pp[j]);
+    const double Rij2 = pp[i].calc_Rij2(pp[j]);
+    if (Rij2 < pp[i].Rij2) {
+      pp[i].Rij2 = Rij2;
+      near[i] = j;
+    }
+    return Rij2;
   }
 
-  inline void update_diB(fasti_t i)
-  noexcept(noexcept(pseudo_jet_t::update_diB( std::declval<double>() )))
+  inline void update_diB(fasti_t i) noexcept(noexcept(
+    std::declval<pseudo_jet_t&>().update_diB( std::declval<double>() )))
   {
-    pp[i]->update_diB(power);
+    pp[i].update_diB(power);
   }
 
-  inline void update_dij(fasti_t i, fasti_t j)
-  noexcept(noexcept(pseudo_jet_t::update_dij(
-    std::declval<const pseudo_jet_t&>(), std::declval<double>() )))
+  inline void update_dij(fasti_t i) noexcept(noexcept(
+    std::declval<pseudo_jet_t&>().update_dij(
+      std::declval<const pseudo_jet_t&>(), std::declval<double>() )))
   {
-    pp[i]->update_dij(pp[j], R2);
+    pp[i].update_dij(pp[near[i]], R2);
   }
 
 public:
   // =========================================================================
 
-  template <typename InputIterator, typename Cut>
-  std::vector<p_type>
-  cluster(InputIterator first, InputIterator last, Cut cut) {
+  template <typename InputIterator,
+            typename OutputType=deref_t<InputIterator>>
+  std::vector<OutputType>
+  cluster(InputIterator first, InputIterator last) {
+    std::vector<OutputType> jj; // complete jets
 
     const fasti_t nump = validate_capacity(std::distance(first,last));
-    if (needed_capacity > capacity) {
+    if (nump > capacity) {
       // allocate container memory
-      if (mem) free(mem);
-      capacity = needed_capacity;
+      if (dij_heap) free(dij_heap);
+      capacity = nump;
       alloc();
 
       fasti_t i = 0;
       for (auto it=first; it!=last; ++it) {
-        // copy particle and update diB
-        ( new (pp+i) pseudo_jet_t(*it) )->update_diB(power);
+        auto* p = new (pp+i) pseudo_jet_t(*it); // copy particle
+        p->update_diB(power); // update diB
+        p->Rij2 = std::numeric_limits<double>::max(); // reset Rij
         ++i;
       }
     }
-
-    std::vector<p_type> jj; // complete jets
 
     // update nearest geometric neighbors Rij
     for (fasti_t i=1; i<nump; ++i) {
@@ -263,38 +229,51 @@ public:
     // update nearest scaled neighbors dij
     for (fasti_t i=0; i<nump; ++i) update_dij(i);
 
-    // TODO: compute order in the heaps
+    // populate heaps
+    for (index_t i=0; i<nump; ++i) dij_heap[i] = i;
+    for (index_t i=0; i<nump; ++i) diB_heap[i] = i;
 
     // loop until pseudo-jets are used up -------------------
-    for (fasti_t n=nump; n>1; --n) {
+    for (fasti_t n=nump; n>1;) {
+
+      // compute order in the heaps
+      std::make_heap(dij_heap,dij_heap+n, [this](index_t i, index_t j){
+        return (this->pp[i].dij > this->pp[j].dij); });
+      std::make_heap(diB_heap,diB_heap+n, [this](index_t i, index_t j){
+        return (this->pp[i].diB > this->pp[j].diB); });
 
       if ( pp[dij_heap[0]].dij < pp[diB_heap[0]].diB ) { // MERGE
 
         const fasti_t p = dij_heap[0], near_p = near[p];
 
         // merge particles
-        pp[p] += pp[near_p];
+        pp[near_p] += pp[p];
         update_diB(p); // recompute beam distances diB
-        pp[p].Rij2 = std::numeric_limits<double>::max(); // reset Rij
+        pp[near_p].Rij2 = std::numeric_limits<double>::max(); // reset Rij
+
+        --n;
+        // remove p from dij heap
+        dij_heap[0] = dij_heap[n];
+        // remove p from diB heap
+        fasti_t p_in_diB_heap = 0;
+        while (diB_heap[p_in_diB_heap]!=p) ++p_in_diB_heap;
+        diB_heap[p_in_diB_heap] = diB_heap[n];
 
         // update nearest geometric neighbors Rij
-        if (__builtin_expect(n>2,1)) {
+        if (__builtin_expect(n>1,1)) {
           for (fasti_t i=0; i<n; ++i) {
             const fasti_t pi = dij_heap[i], near_pi = near[pi];
-            if ((near_pi!=p && near_pi!=near_p) || pi==near_p) continue;
+            if (near_pi!=p && near_pi!=near_p) continue;
             pp[pi].Rij2 = std::numeric_limits<double>::max(); // reset Rij
             for (fasti_t j=0; j<n; ++j) {
               if (j!=i) {
-                const fasti_t pj = dij_heap[j]
-                if (pj!=near_p) {
-                  const fasti_t near_pj = near[pj];
-                  const double Rij2 = update_Rij2(pi,pj);
-                  // NOTE: seems to be necessary only for kt
-                  if (near_pj!=p && near_pj!=near_p && pp[pj].Rij2>Rij2) {
-                    pp[pj].Rij2 = Rij2;
-                    near_pj = pi;
-                    update_dij(pj);
-                  }
+                const fasti_t pj = dij_heap[j], near_pj = near[pj];
+                const double Rij2 = update_Rij2(pi,pj);
+                // NOTE: seems to be necessary only for kt
+                if (near_pj!=p && near_pj!=near_p && pp[pj].Rij2>Rij2) {
+                  pp[pj].Rij2 = Rij2;
+                  near[pj] = pi;
+                  update_dij(pj);
                 }
               }
             }
@@ -302,59 +281,53 @@ public:
           }
         }
 
-        // TODO: recompute heaps' orders
-        // move this above Rij loop
-
       } else { // JET
 
         const fasti_t p = diB_heap[0];
 
-        // identify as jet if passes cut
-        if ( cut(pp[p].p) ) jj.emplace_back(std::move(pp[p].p));
+        // identify as jet
+        const auto* mom = pp[p].p;
+        jj.emplace_back(mom[0],mom[1],mom[2],mom[3]);
+
+        --n;
+        // remove p from dij heap
+        diB_heap[0] = diB_heap[n];
+        // remove p from diB heap
+        fasti_t p_in_dij_heap = 0;
+        while (dij_heap[p_in_dij_heap]!=p) ++p_in_dij_heap;
+        dij_heap[p_in_dij_heap] = dij_heap[n];
 
         // update nearest geometric neighbors Rij
         for (fasti_t i=0; i<n; ++i) {
-          const fasti_t pi = diB_heap[i], near_pi = near[pi];
-          if (near_pi!=p || pi==p) continue;
+          const fasti_t pi = dij_heap[i];
+          if (near[pi]!=p) continue;
           pp[pi].Rij2 = std::numeric_limits<double>::max(); // reset Rij
           for (fasti_t j=0; j<n; ++j) {
             if (j!=i) {
-              const fasti_t pj = dij_heap[j]
-              if (pj!=p) {
-                const fasti_t near_pj = near[pj];
-                const double Rij2 = update_Rij2(pi,pj);
-                // NOTE: seems to be necessary only for kt
-                if (near_pj!=p && pp[pj].Rij2>Rij2) {
-                  pp[pj].Rij2 = Rij2;
-                  near_pj = pi;
-                  update_dij(pj);
-                }
+              const fasti_t pj = dij_heap[j];
+              const double Rij2 = update_Rij2(pi,pj);
+              // NOTE: seems to be necessary only for kt
+              if (near[pj]!=p && pp[pj].Rij2>Rij2) {
+                pp[pj].Rij2 = Rij2;
+                near[pj] = pi;
+                update_dij(pj);
               }
             }
           }
           update_dij(pi);
         }
 
-        // TODO: recompute heaps' orders
-        // move this above Rij loop
-
       }
 
-    }
+    } // end loop
 
     // identify last pseudo-jet as a jet
-    if ( __builtin_expect(nump>0,1) && cut(pp[dij_heap[0]].p) )
-      jj.emplace_back(std::move(pp[dij_heap[0]].p));
-
-    // IDEA: check for N==1 at the beginning of the function
+    if (__builtin_expect(nump>0,1)) {
+      const auto* p = pp[dij_heap[0]].p;
+      jj.emplace_back(p[0],p[1],p[2],p[3]);
+    }
 
     return std::move(jj);
-  }
-
-  template <typename InputIterator>
-  inline std::vector<p_type>
-  cluster(InputIterator first, InputIterator last) {
-    return cluster(first, last, [](const p_type& p){ return true; });
   }
 
 };
