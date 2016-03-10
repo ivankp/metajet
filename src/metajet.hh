@@ -292,9 +292,9 @@ public:
         jj.emplace_back(mom[0],mom[1],mom[2],mom[3]);
 
         --n;
-        // remove p from dij heap
-        diB_heap[0] = diB_heap[n];
         // remove p from diB heap
+        diB_heap[0] = diB_heap[n];
+        // remove p from dij heap
         fasti_t p_in_dij_heap = 0;
         while (dij_heap[p_in_dij_heap]!=p) ++p_in_dij_heap;
         dij_heap[p_in_dij_heap] = dij_heap[n];

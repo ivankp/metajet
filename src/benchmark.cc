@@ -3,6 +3,7 @@
 #include <cstring>
 #include <chrono>
 #include <array>
+#include <cmath>
 
 #include <boost/program_options.hpp>
 
@@ -16,6 +17,8 @@ using namespace std;
 using namespace std::chrono;
 using namespace fastjet;
 namespace po = boost::program_options;
+
+using metajet::sq;
 
 #define test(var) \
   std::cout <<"\033[36m"<< #var <<"\033[0m"<< " = " << var << std::endl;
@@ -133,12 +136,18 @@ int main(int argc, char **argv)
       ++nevents;
     }
 
-    cout << setw(5) << Np << ' ' << setw(9) << nevents << ' '
-         << setw(9) << stats_fj.mean() << " ± "
-         << setw(9) << stats_fj.stdev() << " μs   "
+    cout << right << fixed << setprecision(2);
+    cout << setw(6) << Np << ' ' << setw(8) << nevents << ' '
+         << setw(8) << stats_fj.mean() << " ± "
+         << setw(6) << stats_fj.stdev() << " μs "
          << setw(9) << stats_mj.mean() << " ± "
-         << setw(9) << stats_mj.stdev() << " μs"
-         << setw(9) << (stats_mj.mean()/stats_fj.mean()) << endl;
+         << setw(7) << stats_mj.stdev() << " μs ";
+    double ratio = stats_mj.mean()/stats_fj.mean();
+    cout << setw(6) << ratio << " ± "
+         << setw(5) << sqrt(sq(
+            stats_fj.stdev()/stats_fj.mean(),
+            stats_mj.stdev()/stats_mj.mean()
+         ))*ratio << endl;
   }
 
 }
