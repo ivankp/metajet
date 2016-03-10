@@ -148,13 +148,13 @@ private:
   }
 
   void alloc() {
-    void* mem = malloc(index_size*capacity*3 + pjet_size*capacity);
+    void *mem = malloc(index_size*capacity*3 + pjet_size*capacity);
     if ( !mem ) throw std::runtime_error(
       "cannot allocate memory for cluster_sequence");
-    dij_heap = static_cast<index_t*>(mem);
-    diB_heap = dij_heap + index_size*capacity;
-    near     = diB_heap + index_size*capacity;
-    pp       = static_cast<pseudo_jet_t*>(mem) + index_size*capacity*3;
+    dij_heap = reinterpret_cast<index_t*>(mem);
+    diB_heap = dij_heap + capacity;
+    near     = diB_heap + capacity;
+    pp       = reinterpret_cast<pseudo_jet_t*>(near + capacity);
   }
 
 public:
@@ -205,14 +205,14 @@ public:
       if (dij_heap) free(dij_heap);
       capacity = nump;
       alloc();
+    }
 
-      fasti_t i = 0;
-      for (auto it=first; it!=last; ++it) {
-        auto* p = new (pp+i) pseudo_jet_t(*it); // copy particle
-        p->update_diB(power); // update diB
-        p->Rij2 = std::numeric_limits<double>::max(); // reset Rij
-        ++i;
-      }
+    fasti_t i = 0;
+    for (auto it=first; it!=last; ++it) {
+      auto* p = new (pp+i) pseudo_jet_t(*it); // copy particle
+      p->update_diB(power); // update diB
+      p->Rij2 = std::numeric_limits<double>::max(); // reset Rij
+      ++i;
     }
 
     // update nearest geometric neighbors Rij
@@ -246,10 +246,12 @@ public:
 
         const fasti_t p = dij_heap[0], near_p = near[p];
 
-        // merge particles
+        // merge p into near_p
         pp[near_p] += pp[p];
-        update_diB(p); // recompute beam distances diB
+        update_diB(near_p); // recompute beam distances diB
         pp[near_p].Rij2 = std::numeric_limits<double>::max(); // reset Rij
+        near[near_p] = near_p; // because being near is not
+                               // necessarily commutative
 
         --n;
         // remove p from dij heap

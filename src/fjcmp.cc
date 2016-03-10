@@ -14,6 +14,7 @@
 #include "eventgen.hh"
 
 #ifdef DEBUG
+#define BR std::cout << std::endl;
 #define test(var) \
   std::cout <<"\033[36m"<< #var <<"\033[0m"<< " = " << var << std::endl;
 #endif
@@ -25,12 +26,23 @@ using namespace fastjet;
 
 using metajet::sq;
 
+ostream& operator<<(ostream& s, const PseudoJet& j) {
+  s << setw(16) << j.px()
+    << setw(16) << j.py()
+    << setw(16) << j.pz()
+    << setw(16) << j.E ();
+  return s;
+}
+
 int main(int argc, char **argv)
 {
   if (argc!=3 && argc!=4) {
     cout << "Usage: " << argv[0] << " algorithm radius N" << endl;
     return 1;
   }
+
+  ostream coutN(cout.rdbuf());
+  coutN << right << fixed << scientific << setprecision(8);
 
   fastjet::ClusterSequence::print_banner();
 
@@ -76,12 +88,15 @@ int main(int argc, char **argv)
   double px, py, pz, E;
   vector<PseudoJet> pp;
   while (true) {
+    for (int i=0; i<9; ++i) cout << '\b';
+    cout << setw(9) << event;
+    cout.flush();
 
     // Generate random physical 4-vectors
     if (np) {
       pp.clear();
       pp.reserve(np);
-      for (size_t i=0, n=np; i<n; ++i) {
+      for (size_t i=0; i<np; ++i) {
         genevent(px, py, pz, E);
         pp.emplace_back(px, py, pz, E);
       }
@@ -91,16 +106,17 @@ int main(int argc, char **argv)
     }
 
     #ifdef DEBUG
+    BR
     for (size_t i=1; i<np; ++i) {
       test(pp[i].kt2())
       test(pp[i].rap())
       test(pp[i].phi())
       for (size_t j=0; j<i; ++j) {
-        cout << "R"<<i<<j<<"^2 = " << sq(pp[i].delta_R(pp[j])) << endl;
-        cout << "d"<<i<<j<<" = " << dij(pp[i],pp[j]) << endl;
+        coutN << "R"<<i<<j<<"^2 = " << sq(pp[i].delta_R(pp[j])) << endl;
+        coutN << "d"<<i<<j<<" = " << dij(pp[i],pp[j]) << endl;
       }
     }
-    cout << endl;
+    BR
     #endif
 
     // FastJet **********************************************
@@ -144,7 +160,7 @@ int main(int argc, char **argv)
 
     auto fut_mj = async(launch::async, [&seq_mj,&pp]() {
       // cluster jets
-      vector<PseudoJet> jets = seq_mj.cluster(pp.begin(),pp.end());
+      vector<PseudoJet> jets = seq_mj.cluster(pp.cbegin(),pp.cend());
 
       // sort jets by pT
       sort( jets.begin(), jets.end(),
@@ -160,23 +176,21 @@ int main(int argc, char **argv)
 
     // Print output *****************************************
 
+    // fut_fj.wait();
+    // fut_mj.wait();
+
     const vector<double> out_fj = fut_fj.get();
     const vector<double> out_mj = fut_mj.get();
 
-    ostream coutN(cout.rdbuf());
-    coutN << right << fixed << scientific << setprecision(8);
-
     if (out_mj!=out_fj || argc==3) {
       coutN << endl << "FJ:";
-      for (double pt : out_fj) coutN <<' '<< pt;
+      for (double E : out_fj) coutN << setw(16) << E;
       coutN << endl << "MJ:";
-      for (double pt : out_mj) coutN <<' '<< pt;
+      for (double E : out_mj) coutN << setw(16) << E;
       coutN << endl;
 
       for (size_t i=0; i<np; ++i) {
-        coutN << 'p' << i << ": ";
-        coutN << pp[i].px() << ' ' << pp[i].py() << ' '
-             << pp[i].pz() << ' ' << pp[i].E ();
+        coutN << 'p' << i << ':' << pp[i];
         cout << " diB = " << diB(pp[i]) << endl;
       }
       if (np<21)
@@ -187,16 +201,10 @@ int main(int argc, char **argv)
       cout << endl;
 
       break;
-
-    } else {
-      for (int i=0;i<9;++i) cout << '\b';
-      cout << setw(9) << event;
-      cout.flush();
     }
 
+    if (!np) break;
     ++event;
-
-    if (argc==3) break;
   }
 
   return 0;
