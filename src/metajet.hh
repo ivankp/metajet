@@ -136,7 +136,7 @@ private:
   index_t capacity; // maximum number of particles that
                     // would fit without reallocation
 
-  index_t *dij_heap, *diB_heap, *near;
+  index_t *dij_heap, /**diB_heap,*/ *near;
   pseudo_jet_t *pp; // pseudo-jets
 
   static index_t validate_capacity(index_t n) {
@@ -148,12 +148,12 @@ private:
   }
 
   void alloc() {
-    void *mem = malloc(index_size*capacity*3 + pjet_size*capacity);
+    void *mem = malloc(index_size*capacity*2 + pjet_size*capacity);
     if ( !mem ) throw std::runtime_error(
       "cannot allocate memory for cluster_sequence");
     dij_heap = reinterpret_cast<index_t*>(mem);
-    diB_heap = dij_heap + capacity;
-    near     = diB_heap + capacity;
+    // diB_heap = dij_heap + capacity;
+    near     = dij_heap + capacity;
     pp       = reinterpret_cast<pseudo_jet_t*>(near + capacity);
   }
 
@@ -231,7 +231,6 @@ public:
 
     // populate heaps
     for (index_t i=0; i<nump; ++i) dij_heap[i] = i;
-    for (index_t i=0; i<nump; ++i) diB_heap[i] = i;
 
     // loop until pseudo-jets are used up -------------------
     for (fasti_t n=nump; n>1;) {
@@ -239,10 +238,18 @@ public:
       // compute order in the heaps
       std::make_heap(dij_heap,dij_heap+n, [this](index_t i, index_t j){
         return (this->pp[i].dij > this->pp[j].dij); });
-      std::make_heap(diB_heap,diB_heap+n, [this](index_t i, index_t j){
-        return (this->pp[i].diB > this->pp[j].diB); });
 
-      if ( pp[dij_heap[0]].dij < pp[diB_heap[0]].diB ) { // MERGE
+      fasti_t min_diB_i = dij_heap[0];
+      double  min_diB_d = pp[min_diB_i].diB;
+      for (fasti_t i=1; i<n; ++i) {
+        fasti_t pi = dij_heap[i];
+        if (pp[pi].diB < min_diB_d) {
+          min_diB_d = pp[pi].diB;
+          min_diB_i = pi;
+        }
+      }
+
+      if ( pp[dij_heap[0]].dij < min_diB_d ) { // MERGE
 
         const fasti_t p = dij_heap[0], near_p = near[p];
 
@@ -256,10 +263,6 @@ public:
         --n;
         // remove p from dij heap
         dij_heap[0] = dij_heap[n];
-        // remove p from diB heap
-        fasti_t p_in_diB_heap = 0;
-        while (diB_heap[p_in_diB_heap]!=p) ++p_in_diB_heap;
-        diB_heap[p_in_diB_heap] = diB_heap[n];
 
         // update nearest geometric neighbors Rij
         if (__builtin_expect(n>1,1)) {
@@ -285,7 +288,7 @@ public:
 
       } else { // JET
 
-        const fasti_t p = diB_heap[0];
+        const fasti_t p = min_diB_i;
 
         // identify as jet
         const auto* mom = pp[p].p;
@@ -293,8 +296,6 @@ public:
 
         --n;
         // remove p from dij heap
-        diB_heap[0] = diB_heap[n];
-        // remove p from diB heap
         fasti_t p_in_dij_heap = 0;
         while (dij_heap[p_in_dij_heap]!=p) ++p_in_dij_heap;
         dij_heap[p_in_dij_heap] = dij_heap[n];
